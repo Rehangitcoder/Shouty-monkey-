@@ -1,1 +1,327 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Shouty Monkey - Ocean Fall</title>
+    <style>
+        :root {
+            --monkey-color: #A0522D; /* SaddleBrown */
+            --monkey-face-color: #F5DEB3; /* Wheat */
+            --platform-ground: #8B4513; /* Brown */
+            --platform-grass: #4CAF50; /* Green */
+            --banana-color: #FFEB3B; /* Yellow */
+            --spike-color: #757575; /* Grey */
+            --text-color: #FFFFFF;
+            --accent-color: #FF9800; /* Orange */
+            --ocean-color-deep: #0077BE; /* Deep Blue */
+            --ocean-color-shallow: #64C8FF; /* Shallow Blue */
+            --ocean-foam: #FFFFFF;
+            --background-overlay: rgba(0, 0, 0, 0.1); 
+            --font-family: 'Arial', sans-serif;
+            --loading-spinner-color: var(--accent-color);
+        }
+
+        @font-face {
+            font-family: 'GameFont';
+            src: local('Comic Sans MS'), local('Chalkboard SE'), local('Marker Felt'), sans-serif;
+        }
+
+        body {
+            margin: 0; font-family: 'GameFont', var(--font-family); background-color: #333;
+            color: var(--text-color); display: flex; justify-content: center; align-items: center;
+            height: 100vh; overflow: hidden; touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #game-container {
+            position: relative; width: 100vw; height: 100vh;
+            max-width: 450px; max-height: 800px; overflow: hidden;
+            background-color: var(--background-overlay); box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        #camera-feed {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; z-index: -1; transform: scaleX(-1); 
+        }
+
+        #game-area { position: relative; width: 100%; height: 100%; overflow: hidden; }
+
+        #ocean {
+            position: absolute; bottom: 0; left: 0; width: 100%;
+            height: 15%; background: linear-gradient(to top, var(--ocean-color-deep), var(--ocean-color-shallow));
+            z-index: 1; overflow: hidden;
+        }
+        .wave {
+            position: absolute; bottom: 0; left: -100%; width: 200%; height: 30px;
+            background-image: 
+                radial-gradient(circle at 10px -15px, transparent 20px, var(--ocean-foam) 21px, var(--ocean-foam) 23px, transparent 24px),
+                radial-gradient(circle at 40px -15px, transparent 20px, var(--ocean-foam) 21px, var(--ocean-foam) 23px, transparent 24px),
+                radial-gradient(circle at 70px -15px, transparent 20px, var(--ocean-foam) 21px, var(--ocean-foam) 23px, transparent 24px);
+            background-size: 100px 30px; animation: wave-animation 5s linear infinite; opacity: 0.7;
+        }
+         .wave.back { animation-duration: 7s; animation-direction: reverse; opacity: 0.4; bottom: 5px; }
+        @keyframes wave-animation { 0% { transform: translateX(0); } 100% { transform: translateX(50%); } }
+
+        #ui-top {
+            position: absolute; top: 0; left: 0; right: 0; padding: 15px;
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 100; background: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
+            opacity: 0; transition: opacity 0.5s ease-in-out; 
+        }
+        #ui-top.visible { opacity: 1; }
+
+        #ui-top > div {
+            background-color: rgba(0,0,0,0.4); padding: 8px 12px; border-radius: 8px;
+            font-size: clamp(16px, 4vw, 20px); text-shadow: 1px 1px 2px #000;
+        }
+        #mic-indicator { display: flex; align-items: center; }
+        #mic-icon { font-size: clamp(20px, 5vw, 24px); margin-right: 5px; }
+        #volume-bar-container {
+            width: 50px; height: 10px; background-color: rgba(255,255,255,0.3);
+            border-radius: 5px; overflow: hidden;
+        }
+        #volume-bar { width: 0%; height: 100%; background-color: var(--accent-color); transition: width 0.05s linear; }
+
+        #monkey {
+            position: absolute; width: 50px; height: 60px; 
+            z-index: 10; transition: transform 0.1s ease-out; 
+            opacity: 0; 
+        }
+        #monkey.visible { opacity: 1; transition: opacity 0.2s ease-in; }
+        #monkey.flying-up { transform: rotate(-10deg) scaleY(1.03); }
+        #monkey.falling { transform: rotate(10deg) scaleY(0.97); }
+        #monkey.splashed { animation: monkey-splash 0.5s ease-out forwards; }
+        @keyframes monkey-splash {
+            0% { transform: translateY(0) rotate(10deg) scale(1); }
+            50% { transform: translateY(10px) rotate(20deg) scale(0.9); }
+            100% { transform: translateY(20px) rotate(0deg) scale(0.8); opacity: 0; }
+        }
+
+        .monkey-body { 
+            width: 100%; height: 80%; /* Body takes up most of the monkey's height */
+            background-color: var(--monkey-color); 
+            border-radius: 50% 50% 30% 30% / 60% 60% 40% 40%; 
+            position: relative; /* For positioning face and arms relative to body */
+            top: 0; /* Body starts at the top of #monkey div */
+        }
+        .monkey-face { width: 60%; height: 50%; background-color: var(--monkey-face-color); border-radius: 50%; position: absolute; top: 10%; left: 20%; }
+        .monkey-eye { width: 6px; height: 6px; background-color: black; border-radius: 50%; position: absolute; top: 30%; }
+        .monkey-eye.left { left: 25%; } .monkey-eye.right { right: 25%; }
+        .monkey-mouth { width: 10px; height: 4px; border: 1px solid black; border-top-color: transparent; border-radius: 0 0 50% 50%; position: absolute; bottom: 20%; left: calc(50% - 5px); }
+        
+        .monkey-arm { 
+            width: 10px; height: 25px; 
+            background-color: var(--monkey-color); 
+            border-radius: 5px; 
+            position: absolute; 
+            top: 30%; /* Arms attached to the body */
+            transform-origin: top center; 
+        }
+        .monkey-arm.left { left: -5px; animation: run-arm-left 0.5s infinite ease-in-out; }
+        .monkey-arm.right { right: -5px; animation: run-arm-right 0.5s infinite ease-in-out; }
+        #monkey.flying-up .monkey-arm.left { animation: flap-arm-left 0.3s infinite ease-in-out; }
+        #monkey.flying-up .monkey-arm.right { animation: flap-arm-right 0.3s infinite ease-in-out; }
+        @keyframes run-arm-left { 0%, 100% { transform: rotate(20deg); } 50% { transform: rotate(0deg); } }
+        @keyframes run-arm-right { 0%, 100% { transform: rotate(-20deg); } 50% { transform: rotate(0deg); } }
+        @keyframes flap-arm-left { 0%, 100% { transform: rotate(30deg); } 50% { transform: rotate(60deg); } }
+        @keyframes flap-arm-right { 0%, 100% { transform: rotate(-30deg); } 50% { transform: rotate(-60deg); } }
+
+        .monkey-leg { 
+            width: 12px; height: 15px; 
+            background-color: var(--monkey-color); 
+            border-radius: 0 0 5px 5px; 
+            position: absolute; 
+            /* Corrected: Legs are positioned at the bottom of the #monkey div */
+            bottom: 0px; /* Attach to the very bottom of the #monkey container */
+            animation: run-leg 0.4s infinite ease-in-out; 
+            transform-origin: top center;
+        }
+        .monkey-leg.left { left: 10px; } /* Adjust left/right for placement */
+        .monkey-leg.right { right: 10px; animation-delay: -0.2s; }
+        @keyframes run-leg { 0%, 100% { transform: translateY(0px) rotate(-10deg); } 50% { transform: translateY(2px) rotate(10deg); } } /* Adjusted Y for leg movement */
+
+
+        .game-element { position: absolute; z-index: 5; opacity: 0; }
+        .game-element.visible { opacity: 1; transition: opacity 0.3s ease-in; }
+        .platform { background-color: var(--platform-ground); border-top: 10px solid var(--platform-grass); box-sizing: border-box; height: 60px; }
+        .spike { width: 20px; height: 20px; background-color: var(--spike-color); clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
+        .banana { width: 30px; height: 30px; background-color: var(--banana-color); border-radius: 50% 0 50% 0 / 50% 0 50% 0; transform: rotate(-45deg); box-shadow: 1px 1px 3px rgba(0,0,0,0.3); }
+        .banana.collected { animation: banana-collect 0.5s ease-out forwards; }
+        @keyframes banana-collect { 0% { transform: translateY(0) scale(1) rotate(-45deg); opacity: 1; } 100% { transform: translateY(-50px) scale(1.5) rotate(0deg); opacity: 0; } }
+        .sparkle { position: absolute; width: 8px; height: 8px; background: gold; border-radius: 50%; opacity: 0; animation: sparkle-effect 0.5s ease-out; z-index: 15; }
+        @keyframes sparkle-effect { 0% { transform: scale(0); opacity: 1; } 100% { transform: scale(2) translateY(-20px); opacity: 0; } }
+
+        .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.9); color: var(--text-color); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; z-index: 200; padding: 20px; box-sizing: border-box; }
+        .screen h1 { font-size: clamp(32px, 8vw, 48px); margin-bottom: 10px; color: var(--accent-color); text-shadow: 2px 2px 4px #000; }
+        .screen p { font-size: clamp(16px, 4vw, 20px); margin-bottom: 20px; }
+        .screen button { background-color: var(--accent-color); color: var(--text-color); border: none; padding: 15px 30px; border-radius: 8px; font-size: clamp(18px, 5vw, 24px); cursor: pointer; box-shadow: 0 4px #C67200; transition: all 0.1s ease; font-family: 'GameFont', var(--font-family); }
+        .screen button:active { box-shadow: 0 2px #C67200; transform: translateY(2px); }
+        .screen button:hover { background-color: #FFB74D; }
+        
+        #loading-screen { display: flex; }
+        .spinner { width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.2); border-top-color: var(--loading-spinner-color); border-radius: 50%; animation: spin 1s linear infinite; margin-top: 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #levels-screen { display: none; }
+        .level-button { padding: 20px 40px; margin: 10px; font-size: clamp(22px, 6vw, 30px) !important; width: 150px; }
+
+        #main-menu-screen { display: none; }
+        #permission-info { font-size: clamp(14px, 3.5vw, 18px); margin-top: 15px; }
+        .shout-instruction { font-size: clamp(20px, 5vw, 28px); color: var(--accent-color); animation: pulse-shout 1.5s infinite; margin-bottom: 20px !important; }
+        @keyframes pulse-shout { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
+        #play-button { font-size: clamp(30px, 8vw, 50px) !important; padding: 25px 60px !important; margin-top: 30px; animation: pulse-play-button 2s infinite ease-in-out; }
+        @keyframes pulse-play-button { 0%, 100% { transform: scale(1); box-shadow: 0 6px #C67200; } 50% { transform: scale(1.05); box-shadow: 0 8px 15px #C67200; } }
+
+        #game-over-screen { display: none; }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <video id="camera-feed" autoplay playsinline muted></video>
+        <div id="game-area">
+            <div id="ocean">
+                <div class="wave"></div>
+                <div class="wave back"></div>
+            </div>
+            <div id="ui-top">
+                <div id="score-display">Score: 0</div>
+                <div id="mic-indicator">
+                    <span id="mic-icon">🎤</span>
+                    <div id="volume-bar-container"><div id="volume-bar"></div></div>
+                </div>
+                <div id="high-score-display">High: 0</div>
+            </div>
+            <div id="monkey">
+                <!-- Arms are positioned relative to the body -->
+                <div class="monkey-body">
+                    <div class="monkey-face"><div class="monkey-eye left"></div><div class="monkey-eye right"></div><div class="monkey-mouth"></div></div>
+                    <div class="monkey-arm left"></div> <div class="monkey-arm right"></div>
+                </div>
+                <!-- Legs are positioned relative to the main #monkey container -->
+                <div class="monkey-leg left"></div><div class="monkey-leg right"></div>
+            </div>
+        </div>
+
+        <div id="loading-screen" class="screen">
+            <h1>Shouty Monkey</h1> <p>Loading Awesomeness...</p> <div class="spinner"></div>
+        </div>
+        <div id="levels-screen" class="screen">
+            <h1>Select Level</h1> <button id="level-1-button" class="level-button">Level 1</button>
+            <p style="margin-top: 30px; font-size: clamp(14px, 3vw, 16px);">More levels coming soon!</p>
+        </div>
+        <div id="main-menu-screen" class="screen">
+            <h1>Shouty Monkey</h1> <p class="shout-instruction">Shout to Fly Up!</p>
+            <button id="play-button">PLAY</button>
+            <p id="permission-info">Allow camera & mic. Tap for a boost if mic is off.</p>
+            <p id="menu-high-score" style="margin-top:20px; font-size: clamp(16px, 4vw, 20px);">High Score: 0</p>
+        </div>
+        <div id="game-over-screen" class="screen" style="display: none;">
+            <h1>Game Over!</h1><p id="final-score">Your Score: 0</p> <button id="restart-button">Retry</button>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const cameraFeed = document.getElementById('camera-feed');
+        const gameArea = document.getElementById('game-area');
+        const monkeyElement = document.getElementById('monkey');
+        const scoreDisplay = document.getElementById('score-display');
+        const highScoreDisplay = document.getElementById('high-score-display');
+        const uiTopElement = document.getElementById('ui-top');
+        const micIcon = document.getElementById('mic-icon');
+        const volumeBar = document.getElementById('volume-bar');
+        const oceanElement = document.getElementById('ocean'); 
+       
+        const loadingScreen = document.getElementById('loading-screen');
+        const levelsScreen = document.getElementById('levels-screen');
+        const mainMenuScreen = document.getElementById('main-menu-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+
+        const level1Button = document.getElementById('level-1-button');
+        const playButton = document.getElementById('play-button');
+        const restartButton = document.getElementById('restart-button');
+        
+        const permissionInfo = document.getElementById('permission-info');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const menuHighScoreDisplay = document.getElementById('menu-high-score');
+
+        let appState = 'LOADING';
+        let score = 0;
+        let highScore = localStorage.getItem('shoutyMonkeyOceanFallHighScore') || 0;
+
+        let audioContext; let analyser; let microphoneStream; let audioDataArray;
+        const BYTE_FLIGHT_THRESHOLD = 60; 
+        const MAX_VOLUME_FOR_FLIGHT_SCALING = 180; 
+        let isMicAllowed = false;
+
+        let MONKEY_FIXED_X; let monkeyY;  let monkeyVY = 0;
+        const MIN_UPWARD_FORCE_SCALER = 0.8; const MAX_UPWARD_FORCE_SCALER = 3.0; 
+        const GRAVITY_FORCE = 1.0; const TAP_BOOST_VELOCITY = 16;  
+        const MAX_UPWARD_VELOCITY_CAP = 20; const MAX_DOWNWARD_VELOCITY_CAP = -25; 
+        const DAMPING_FACTOR = 0.98;   
+        let onPlatform = false; 
+        const MONKEY_WIDTH = 50; const MONKEY_HEIGHT = 60;
+        let OCEAN_SURFACE_Y; 
+        let platforms = []; let obstacles = []; let bananas = [];
+        let gameSpeed = 3.0; const INITIAL_GAME_SPEED = 3.0; const MAX_GAME_SPEED = 7.0;
+        let lastTime = 0; let gameLoopId;
+        let sfxGainNode; let canPlayThrustSound = true;
+
+        function initAudio() {
+            if (audioContext) return; audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            sfxGainNode = audioContext.createGain(); sfxGainNode.gain.value = 0.3; sfxGainNode.connect(audioContext.destination);
+        }
+        async function setupMedia() {
+            permissionInfo.innerHTML = "Requesting permissions..."; // Initial feedback
+            try {
+                const videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+                cameraFeed.srcObject = videoStream; 
+                permissionInfo.innerHTML = "Camera OK. <br>Waiting for Mic...";
+            } catch (vidErr) {
+                console.warn("Video access denied or not available:", vidErr);
+                permissionInfo.innerHTML = "Video not available. Game will run without camera background. Waiting for Mic...";
+                cameraFeed.style.display = 'none'; gameContainer.style.backgroundColor = '#52a2f2'; 
+            }
+
+            try {
+                microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                if (!audioContext) initAudio();
+                const source = audioContext.createMediaStreamSource(microphoneStream);
+                analyser = audioContext.createAnalyser(); analyser.fftSize = 256; 
+                audioDataArray = new Uint8Array(analyser.frequencyBinCount); source.connect(analyser);
+                isMicAllowed = true; micIcon.textContent = '🎤';
+                
+                if (permissionInfo.textContent.startsWith("Video not available")) {
+                    permissionInfo.innerHTML = "Video not available. Mic OK! <br>Shout to Fly, or Tap for boost.";
+                } else {
+                     permissionInfo.innerHTML = "Camera & Mic OK! <br>Shout to Fly, or Tap for boost.";
+                }
+            } catch (audErr) {
+                console.warn("Mic access denied:", audErr); isMicAllowed = false; micIcon.textContent = '🔇';
+                let currentPermInfo = permissionInfo.textContent;
+                 if (currentPermInfo.includes("Camera OK")) { // It had camera but mic failed
+                    permissionInfo.innerHTML = "Camera OK. Mic denied/unavailable. <br>Tap for boost.";
+                } else if (currentPermInfo.startsWith("Video not available")) { // Video failed, mic also failed
+                     permissionInfo.innerHTML = "Video not available. Mic denied/unavailable. <br>Tap for boost.";
+                }
+                else { // Both likely failed or initial message
+                    permissionInfo.textContent = "Cam/Mic denied or unavailable. Tap for boost.";
+                }
+            }
+        }
+        function getMicVolume() {
+            if (!isMicAllowed || !analyser) return 0; analyser.getByteFrequencyData(audioDataArray);
+            let sum = 0; for (let i = 0; i < audioDataArray.length; i++) sum += audioDataArray[i];
+            const averageVolume = sum / audioDataArray.length; 
+            volumeBar.style.width = `${Math.min(100, (averageVolume / 128) * 100)}%`; return averageVolume;
+        }
+        function playSound(type) {
+            if (!audioContext || !sfxGainNode) return; if (audioContext.state === 'suspended') audioContext.resume();
+            const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain();
+            gainNode.connect(sfxGainNode); oscillator.connect(gainNode); let duration = 0.5;
+            switch (type) {
+                case 'fly_thrust': oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(180, audioContext.currentTime); gainNode.gain.setValueAtTime(0.1, audioContext.currentTime); oscillator.frequency.exponentialRampToValueAtTime(250, audioContext.currentTime + 0.08); gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.1); duration = 0.1; break;
+                case 'colle

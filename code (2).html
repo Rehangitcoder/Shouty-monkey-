@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Shouty Monkey - Ocean Fall</title>
+    <style>
+        :root {
+            --monkey-color: #A0522D; /* SaddleBrown */
+            --monkey-face-color: #F5DEB3; /* Wheat */
+            --platform-ground: #8B4513; /* Brown */
+            --platform-grass: #4CAF50; /* Green */
+            --banana-color: #FFEB3B; /* Yellow */
+            --spike-color: #757575; /* Grey */
+            --text-color: #FFFFFF;
+            --accent-color: #FF9800; /* Orange */
+            --ocean-color-deep: #0077BE; /* Deep Blue */
+            --ocean-color-shallow: #64C8FF; /* Shallow Blue */
+            --ocean-foam: #FFFFFF;
+            --background-overlay: rgba(0, 0, 0, 0.1); 
+            --font-family: 'Arial', sans-serif;
+            --loading-spinner-color: var(--accent-color);
+        }
+
+        @font-face {
+            font-family: 'GameFont';
+            src: local('Comic Sans MS'), local('Chalkboard SE'), local('Marker Felt'), sans-serif;
+        }
+
+        body {
+            margin: 0; font-family: 'GameFont', var(--font-family); background-color: #333;
+            color: var(--text-color); display: flex; justify-content: center; align-items: center;
+            height: 100vh; overflow: hidden; touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #game-container {
+            position: relative; width: 100vw; height: 100vh;
+            max-width: 450px; max-height: 800px; overflow: hidden;
+            background-color: var(--background-overlay); box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        #camera-feed {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; z-index: -1; transform: scaleX(-1); 
+        }
+
+        #game-area { position: relative; width: 100%; height: 100%; overflow: hidden; }
+
+        #ocean {
+            position: absolute; bottom: 0; left: 0; width: 100%;
+            height: 15%; background: linear-gradient(to top, var(--ocean-color-deep), var(--ocean-color-shallow));
+            z-index: 1; overflow: hidden;
+        }
+        .wave {
+            position: absolute; bottom: 0; left: -100%; width: 200%; height: 30px;
+            background-image: 
+                radial-gradient(circle at 10px -15px, transparent 20px, var(--ocean-foam) 21px, var(--ocean-foam) 23px, transparent 24px),
+                radial-gradient(circle at 40px -15px, transparent 20px, var(--ocean-foam) 21px, var(--ocean-foam) 23px, transparent 24px),
+                radial-gradient(circle at 70px -15px, transparent 20px, var(--ocean-foam) 21px, var(--ocean-foam) 23px, transparent 24px);
+            background-size: 100px 30px; animation: wave-animation 5s linear infinite; opacity: 0.7;
+        }
+         .wave.back { animation-duration: 7s; animation-direction: reverse; opacity: 0.4; bottom: 5px; }
+        @keyframes wave-animation { 0% { transform: translateX(0); } 100% { transform: translateX(50%); } }
+
+        #ui-top {
+            position: absolute; top: 0; left: 0; right: 0; padding: 10px; 
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; 
+            z-index: 100; background: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
+            opacity: 0; transition: opacity 0.5s ease-in-out; 
+        }
+        #ui-top.visible { opacity: 1; }
+
+        #ui-top > div {
+            background-color: rgba(0,0,0,0.4); padding: 6px 10px; border-radius: 8px; 
+            font-size: clamp(14px, 3.5vw, 18px); text-shadow: 1px 1px 2px #000;
+            margin: 3px; 
+        }
+        #level-target-info { display: flex; flex-direction: column; align-items: flex-start; }
+        #level-target-info div { background: none; padding: 2px 0; font-size: clamp(13px, 3vw, 16px); }
+
+        #mic-indicator { display: flex; align-items: center; }
+        #mic-icon { font-size: clamp(18px, 4.5vw, 22px); margin-right: 5px; transition: color 0.1s linear; } 
+        #volume-bar-container {
+            width: 40px; height: 8px; background-color: rgba(255,255,255,0.3); 
+            border-radius: 5px; overflow: hidden;
+        }
+        #volume-bar { width: 0%; height: 100%; background-color: var(--accent-color); transition: width 0.05s linear; }
+
+        #monkey {
+            position: absolute; width: 50px; height: 60px; 
+            z-index: 10; transition: transform 0.1s ease-out; 
+            opacity: 0; 
+        }
+        #monkey.visible { opacity: 1; transition: opacity 0.2s ease-in; }
+        #monkey.flying-up { transform: rotate(-10deg) scaleY(1.03); }
+        #monkey.falling { transform: rotate(10deg) scaleY(0.97); }
+        #monkey.splashed { animation: monkey-splash 0.5s ease-out forwards; }
+        @keyframes monkey-splash {
+            0% { transform: translateY(0) rotate(10deg) scale(1); }
+            50% { transform: translateY(10px) rotate(20deg) scale(0.9); }
+            100% { transform: translateY(20px) rotate(0deg) scale(0.8); opacity: 0; }
+        }
+
+        .monkey-body { 
+            width: 100%; height: 80%; 
+            background-color: var(--monkey-color); 
+            border-radius: 50% 50% 30% 30% / 60% 60% 40% 40%; 
+            position: relative; 
+            top: 0;
+        }
+        .monkey-face { width: 60%; height: 50%; background-color: var(--monkey-face-color); border-radius: 50%; position: absolute; top: 10%; left: 20%; }
+        .monkey-eye { width: 6px; height: 6px; background-color: black; border-radius: 50%; position: absolute; top: 30%; }
+        .monkey-eye.left { left: 25%; } .monkey-eye.right { right: 25%; }
+        .monkey-mouth { width: 10px; height: 4px; border: 1px solid black; border-top-color: transparent; border-radius: 0 0 50% 50%; position: absolute; bottom: 20%; left: calc(50% - 5px); }
+        
+        .monkey-arm { 
+            width: 10px; height: 25px; 
+            background-color: var(--monkey-color); 
+            border-radius: 5px; 
+            position: absolute; 
+            top: 30%; 
+            transform-origin: top center; 
+        }
+        .monkey-arm.left { left: -5px; animation: run-arm-left 0.5s infinite ease-in-out; }
+        .monkey-arm.right { right: -5px; animation: run-arm-right 0.5s infinite ease-in-out; }
+        #monkey.flying-up .monkey-arm.left { animation: flap-arm-left 0.3s infinite ease-in-out; }
+        #monkey.flying-up .monkey-arm.right { animation: flap-arm-right 0.3s infinite ease-in-out; }
+        @keyframes run-arm-left { 0%, 100% { transform: rotate(20deg); } 50% { transform: rotate(0deg); } }
+        @keyframes run-arm-right { 0%, 100% { transform: rotate(-20deg); } 50% { transform: rotate(0deg); } }
+        @keyframes flap-arm-left { 0%, 100% { transform: rotate(30deg); } 50% { transform: rotate(60deg); } }
+        @keyframes flap-arm-right { 0%, 100% { transform: rotate(-30deg); } 50% { transform: rotate(-60deg); } }
+
+        .monkey-leg { 
+            width: 12px; height: 15px; 
+            background-color: var(--monkey-color); 
+            border-radius: 0 0 5px 5px; 
+            position: absolute; 
+            bottom: 0px; 
+            animation: run-leg 0.4s infinite ease-in-out; 
+            transform-origin: top center;
+        }
+        .monkey-leg.left { left: 10px; } 
+        .monkey-leg.right { right: 10px; animation-delay: -0.2s; }
+        @keyframes run-leg { 0%, 100% { transform: translateY(0px) rotate(-10deg); } 50% { transform: translateY(2px) rotate(10deg); } } 
+
+
+        .game-element { position: absolute; z-index: 5; opacity: 0; }
+        .game-element.visible { opacity: 1; transition: opacity 0.3s ease-in; }
+        .platform { background-color: var(--platform-ground); border-top: 10px solid var(--platform-grass); box-sizing: border-box; height: 60px; }
+        .spike { width: 20px; height: 20px; background-color: var(--spike-color); clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
+        .banana { width: 30px; height: 30px; background-color: var(--banana-color); border-radius: 50% 0 50% 0 / 50% 0 50% 0; transform: rotate(-45deg); box-shadow: 1px 1px 3px rgba(0,0,0,0.3); }
+        .banana.collected { animation: banana-collect 0.5s ease-out forwards; }
+        @keyframes banana-collect { 0% { transform: translateY(0) scale(1) rotate(-45deg); opacity: 1; } 100% { transform: translateY(-50px) scale(1.5) rotate(0deg); opacity: 0; } }
+        .sparkle { position: absolute; width: 8px; height: 8px; background: gold; border-radius: 50%; opacity: 0; animation: sparkle-effect 0.5s ease-out; z-index: 15; }
+        @keyframes sparkle-effect { 0% { transform: scale(0); opacity: 1; } 100% { transform: scale(2) translateY(-20px); opacity: 0; } }
+
+        .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.9); color: var(--text-color); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; z-index: 200; padding: 20px; box-sizing: border-box; }
+        .screen h1 { font-size: clamp(32px, 8vw, 48px); margin-bottom: 10px; color: var(--accent-color); text-shadow: 2px 2px 4px #000; }
+        .screen p { font-size: clamp(16px, 4vw, 20px); margin-bottom: 20px; }
+        .screen button { background-color: var(--accent-color); color: var(--text-color); border: none; padding: 15px 30px; border-radius: 8px; font-size: clamp(18px, 5vw, 24px); cursor: pointer; box-shadow: 0 4px #C67200; transition: all 0.1s ease; font-family: 'GameFont', var(--font-family); margin: 5px; }
+        .screen button:active { box-shadow: 0 2px #C67200; transform: translateY(2px); }
+        .screen button:hover { background-color: #FFB74D; }
+        .screen button:disabled { background-color: #757575; color: #ccc; box-shadow: 0 4px #555; cursor: not-allowed; }
+        
+        #loading-screen { display: flex; }
+        .spinner { width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.2); border-top-color: var(--loading-spinner-color); border-radius: 50%; animation: spin 1s linear infinite; margin-top: 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #levels-screen { display: none; }
+        #level-buttons-container {
+            display: flex; flex-wrap: wrap; justify-content: center;
+            max-height: 60vh; overflow-y: auto; padding: 10px;
+            width: 100%;
+        }
+        .level-button { 
+            padding: 15px 20px; margin: 8px; 
+            font-size: clamp(18px, 4vw, 22px) !important; 
+            width: 120px; 
+        }
+
+
+        #main-menu-screen { display: none; }
+        #main-menu-level-info { font-size: clamp(18px, 4.5vw, 22px); margin-bottom: 10px; }
+        #permission-info { font-size: clamp(14px, 3.5vw, 18px); margin-top: 15px; }
+        .shout-instruction { font-size: clamp(20px, 5vw, 28px); color: var(--accent-color); animation: pulse-shout 1.5s infinite; margin-bottom: 20px !important; }
+        @keyframes pulse-shout { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
+        #play-button { font-size: clamp(30px, 8vw, 50px) !important; padding: 25px 60px !important; margin-top: 30px; animation: pulse-play-button 2s infinite ease-in-out; }
+        @keyframes pulse-play-button { 0%, 100% { transform: scale(1); box-shadow: 0 6px #C67200; } 50% { transform: scale(1.05); box-shadow: 0 8px 15px #C67200; } }
+
+        #game-over-screen { display: none; }
+        #level-complete-screen { display: none; }
+
+        /* NEW: Win Effect Overlay Styling */
+        #win-effect-overlay {
+            display: none; /* Initially hidden */
+            background-color: transparent !important; /* Override .screen background */
+            z-index: 250; /* Higher than other screens, but lower than potential popups if any */
+            pointer-events: none; /* Allow clicks through if needed, though it's temporary */
+        }
+        #win-effect-text {
+            font-size: clamp(40px, 12vw, 80px) !important; /* Make it BIG */
+            color: gold;
+            text-shadow: 0 0 10px #fff, 0 0 20px var(--accent-color), 2px 2px 3px rgba(0,0,0,0.8);
+            animation: win-text-pop 1.5s ease-out forwards;
+            opacity: 0;
+        }
+        @keyframes win-text-pop {
+            0% { transform: scale(0.3) rotate(-15deg); opacity: 0; }
+            60% { transform: scale(1.1) rotate(5deg); opacity: 1; }
+            80% { transform: scale(0.95) rotate(-2deg); opacity: 1; }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        .confetti-piece {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            opacity: 0;
+            animation: fall-and-fade 2s linear forwards;
+        }
+        @keyframes fall-and-fade {
+            0% { transform: translateY(-10vh) rotate(0deg) scale(1); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg) scale(0.5); opacity: 0; }
+        }
+        /* END: Win Effect Overlay Styling */
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <video id="camera-feed" autoplay playsinline muted></video>
+        <div id="game-area">
+            <div id="ocean">
+                <div class="wave"></div>
+                <div class="wave back"></div>
+            </div>
+            <div id="ui-top">
+                <div id="level-target-info">
+                    <div id="level-display">Level: 1</div>
+                    <div id="target-score-display">Target: 0</div>
+                </div>
+                <div id="score-display">Score: 0</div>
+                <div id="mic-indicator">
+                    <span id="mic-icon">🎤</span>
+                    <div id="volume-bar-container"><div id="volume-bar"></div></div>
+                </div>
+                <div id="high-score-display">High: 0</div>
+            </div>
+            <div id="monkey">
+                <div class="monkey-body">
+                    <div class="monkey-face"><div class="monkey-eye left"></div><div class="monkey-eye right"></div><div class="monkey-mouth"></div></div>
+                    <div class="monkey-arm left"></div> <div class="monkey-arm right"></div>
+                </div>
+                <div class="monkey-leg left"></div><div class="monkey-leg right"></div>
+            </div>
+        </div>
+
+        <div id="loading-screen" class="screen">
+            <h1>Shouty Monkey</h1> <p>Loading Awesomeness...</p> <div class="spinner"></div>
+        </div>
+
+        <div id="levels-screen" class="screen">
+            <h1>Select Level</h1>
+            <div id="level-buttons-container"></div>
+            <p style="margin-top: 20px; font-size: clamp(14px, 3vw, 16px);">Complete levels to unlock more!</p>
+        </div>
+
+        <div id="main-menu-screen" class="screen">
+            <h1>Shouty Monkey</h1>
+            <div id="main-menu-level-info">Level X</div>
+            <p class="shout-instruction">Shout to Fly Up!</p>
+            <button id="play-button">PLAY</button>
+            <p id="permission-info">Allow camera & mic. Tap for a boost if mic is off.</p>
+            <p id="menu-high-score" style="margin-top:20px; font-size: clamp(16px, 4vw, 20px);">High Score: 0</p>
+            <button id="back-to-levels-from-main-menu-button" style="font-size: clamp(16px, 4vw, 20px); padding: 10px 20px; margin-top: 15px;">Change Level</button>
+        </div>
+
+        <div id="game-over-screen" class="screen" style="display: none;">
+            <h1>Game Over!</h1>
+            <p id="final-score">Your Score: 0</p>
+            <button id="restart-button">Retry Level</button>
+            <button id="back-to-levels-from-game-over-button" style="font-size: clamp(16px, 4vw, 20px); padding: 10px 20px;">Select Level</button>
+        </div>
+        
+        <div id="level-complete-screen" class="screen" style="display: none;">
+            <h1>Level Complete!</h1>
+            <p id="level-complete-final-score">Your Score: 0</p>
+            <button id="next-level-button">Next Level</button>
+            <button id="back-to-levels-from-complete-button">Select Level</button>
+        </div>
+
+        <!-- NEW: Win Effect Overlay -->
+        <div id="win-effect-overlay" class="screen"> <!-- class="screen" for basic flex centering -->
+            <h1 id="win-effect-text">LEVEL UP!</h1>
+            <!-- Confetti will be added dynamically by JS into game-area -->
+        </div>
+    </div>
+
+    <script>
+        // --- Existing DOM Elements ---
+        const gameContainer = document.getElementById('game-container');
+        const cameraFeed = document.getElementById('camera-feed');
+        const gameArea = document.getElementById('game-area');
+        const monkeyElement = document.getElementById('monkey');
+        const scoreDisplay = document.getElementById('score-display');
+        const highScoreDisplay = document.getElementById('high-score-display');
+        const uiTopElement = document.getElementById('ui-top');
+        const micIcon = document.getElementById('mic-icon');
+        const volumeBar = document.getElementById('volume-bar');
+        const oceanElement = document.getElementById('ocean'); 
+       
+        const loadingScreen = document.getElementById('loading-screen');
+        const levelsScreen = document.getElementById('levels-screen');
+        const mainMenuScreen = document.getElementById('main-menu-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+
+        const playButton = document.getElementById('play-button');
+        const restartButton = document.getElementById('restart-button');
+        
+        const permissionInfo = document.getElementById('permission-info');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const menuHighScoreDisplay = document.getElementById('menu-high-score');
+
+        const levelButtonsContainer = document.getElementById('level-buttons-container');
+        const levelDisplay = document.getElementById('level-display');
+        const targetScoreDisplay = document.getElementById('target-score-display');
+        const mainMenuLevelInfo = document.getElementById('main-menu-level-info');
+        const backToLevelsFromMainMenuButton = document.getElementById('back-to-levels-from-main-menu-button');
+        const backToLevelsFromGameOverButton = document.getElementById('back-to-levels-from-game-over-button');
+        const levelCompleteScreen = document.getElementById('level-complete-screen');
+        const levelCompleteFinalScore = document.getElementById('level-complete-final-score');
+        const nextLevelButton = document.getElementById('next-level-button');
+        const backToLevelsFromCompleteButton = document.getElementById('back-to-levels-from-complete-button');
+        
+        // NEW: Win Effect Elements
+        const winEffectOverlay = document.getElementById('win-effect-overlay');
+        const winEffectText = document.getElementById('win-effect-text');
+
+
+        // --- MODIFIED Level Definitions (Easier) ---
+        const LEVELS = [
+            // Easier starting levels
+            { id: 1, name: "Warm Up", targetScore: 30, initialGameSpeed: 2.0, maxGameSpeed: 3.0, 
+              platformMinWidth: 150, platformMaxWidth: 280, minGap: 150, maxGap: 220, spikeChance: 0.05, bananaChance: 0.7, oceanHeightPercent: 12 },
+            { id: 2, name: "Smooth Sailing", targetScore: 40, initialGameSpeed: 2.2, maxGameSpeed: 3.2,
+              platformMinWidth: 140, platformMaxWidth: 250, minGap: 140, maxGap: 200, spikeChance: 0.08, bananaChance: 0.65, oceanHeightPercent: 13 },
+            { id: 3, name: "First Spikes", targetScore: 60, initialGameSpeed: 2.5, maxGameSpeed: 3.5,
+              platformMinWidth: 120, platformMaxWidth: 220, minGap: 120, maxGap: 180, spikeChance: 0.1, bananaChance: 0.6, oceanHeightPercent: 14 },
+            { id: 4, name: "Banana Boost", targetScore: 70, initialGameSpeed: 2.5, maxGameSpeed: 3.8,
+              platformMinWidth: 110, platformMaxWidth: 200, minGap: 110, maxGap: 190, spikeChance: 0.08, bananaChance: 0.8, oceanHeightPercent: 14 },
+            { id: 5, name: "Wider Paths", targetScore: 80, initialGameSpeed: 2.8, maxGameSpeed: 4.0,
+              platformMinWidth: 100, platformMaxWidth: 180, minGap: 100, maxGap: 160, spikeChance: 0.15, bananaChance: 0.5, oceanHeightPercent: 15 },
+            
+            // Gradually increasing difficulty
+            { id: 6, name: "Speed Up", targetScore: 90, initialGameSpeed: 3.0, maxGameSpeed: 4.2, 
+              platformMinWidth: 100, platformMaxWidth: 200, minGap: 100, maxGap: 150, spikeChance: 0.15, bananaChance: 0.45, oceanHeightPercent: 15 },
+            { id: 7, name: "The Jumps", targetScore: 70, initialGameSpeed: 2.8, maxGameSpeed: 4.0, 
+              platformMinWidth: 80, platformMaxWidth: 140, minGap: 160, maxGap: 230, spikeChance: 0.18, bananaChance: 0.5, oceanHeightPercent: 15 }, 
+            { id: 8, name: "Rising Tide", targetScore: 80, initialGameSpeed: 3.0, maxGameSpeed: 4.5, 
+              platformMinWidth: 90, platformMaxWidth: 180, minGap: 100, maxGap: 160, spikeChance: 0.2, bananaChance: 0.4, oceanHeightPercent: 18 }, 
+            { id: 9, name: "Spike Field Lite", targetScore: 100, initialGameSpeed: 3.2, maxGameSpeed: 4.8, 
+              platformMinWidth: 100, platformMaxWidth: 200, minGap: 90, maxGap: 150, spikeChance: 0.25, bananaChance: 0.35, oceanHeightPercent: 15 }, 
+            { id: 10, name: "Quick Dash", targetScore: 60, initialGameSpeed: 3.5, maxGameSpeed: 5.0, 
+              platformMinWidth: 90, platformMaxWidth: 160, minGap: 80, maxGap: 140, spikeChance: 0.20, bananaChance: 0.4, oceanHeightPercent: 16 },
+            
+            // Mid-range difficulty
+             { id: 11, name: "Midpoint Trial", targetScore: 150, initialGameSpeed: 3.3, maxGameSpeed: 5.0, platformMinWidth: 90, platformMaxWidth: 190, minGap: 90, maxGap: 150, spikeChance: 0.28, bananaChance: 0.5, oceanHeightPercent: 15 },
+             { id: 12, name: "Banana Bonanza", targetScore: 200, initialGameSpeed: 3.0, maxGameSpeed: 4.8, platformMinWidth: 110, platformMaxWidth: 230, minGap: 110, maxGap: 190, spikeChance: 0.1, bananaChance: 0.75, oceanHeightPercent: 15 },
+             { id: 13, name: "Precise Steps", targetScore: 100, initialGameSpeed: 3.4, maxGameSpeed: 5.1, platformMinWidth: 70, platformMaxWidth: 120, minGap: 100, maxGap: 160, spikeChance: 0.22, bananaChance: 0.4, oceanHeightPercent: 16 },
+             { id: 14, name: "Ocean's Sigh", targetScore: 90, initialGameSpeed: 3.5, maxGameSpeed: 5.2, platformMinWidth: 100, platformMaxWidth: 200, minGap: 100, maxGap: 170, spikeChance: 0.15, bananaChance: 0.35, oceanHeightPercent: 20 }, 
+             { id: 15, name: "The Descent Lite", targetScore: 120, initialGameSpeed: 3.6, maxGameSpeed: 5.5, platformMinWidth: 80, platformMaxWidth: 160, minGap: 80, maxGap: 140, spikeChance: 0.3, bananaChance: 0.3, oceanHeightPercent: 15, platformYVariance: 200 }, 
+            
+            // Harder levels
+             { id: 16, name: "Spike Run", targetScore: 150, initialGameSpeed: 3.8, maxGameSpeed: 5.8, platformMinWidth: 90, platformMaxWidth: 180, minGap: 90, maxGap: 140, spikeChance: 0.4, bananaChance: 0.25, oceanHeightPercent: 15 }, 
+             { id: 17, name: "Breakneck Pace", targetScore: 100, initialGameSpeed: 4.5, maxGameSpeed: 6.5, platformMinWidth: 100, platformMaxWidth: 200, minGap: 100, maxGap: 150, spikeChance: 0.2, bananaChance: 0.3, oceanHeightPercent: 15 }, 
+             { id: 18, name: "Marathon", targetScore: 250, initialGameSpeed: 3.2, maxGameSpeed: 5.2, platformMinWidth: 100, platformMaxWidth: 200, minGap: 110, maxGap: 180, spikeChance: 0.18, bananaChance: 0.6, oceanHeightPercent: 15 }, 
+             { id: 19, name: "Expert Route", targetScore: 180, initialGameSpeed: 4.0, maxGameSpeed: 6.2, platformMinWidth: 70, platformMaxWidth: 140, minGap: 80, maxGap: 130, spikeChance: 0.35, bananaChance: 0.3, oceanHeightPercent: 18 },
+             { id: 20, name: "Monkey Legend", targetScore: 220, initialGameSpeed: 4.2, maxGameSpeed: 6.8, platformMinWidth: 80, platformMaxWidth: 160, minGap: 70, maxGap: 120, spikeChance: 0.30, bananaChance: 0.4, oceanHeightPercent: 17, platformYVariance: 180 }
+        ];
+        let currentLevelIndex = 0;
+        let currentLevelData = LEVELS[currentLevelIndex];
+        let maxUnlockedLevel = parseInt(localStorage.getItem('shoutyMonkeyMaxUnlockedLevel')) || 1;
+
+
+        let appState = 'LOADING';
+        let score = 0;
+        let highScore = localStorage.getItem('shoutyMonkeyOceanFallHighScore') || 0;
+
+        let audioContext; let analyser; let microphoneStream; let audioDataArray;
+        const BYTE_FLIGHT_THRESHOLD = 60; 
+        const MAX_VOLUME_FOR_FLIGHT_SCALING = 180; 
+        let isMicAllowed = false;
+
+        let MONKEY_FIXED_X; let monkeyY;  let monkeyVY = 0;
+        const MIN_UPWARD_FORCE_SCALER = 0.8; const MAX_UPWARD_FORCE_SCALER = 3.0; 
+        const GRAVITY_FORCE = 1.0; const TAP_BOOST_VELOCITY = 16;  
+        const MAX_UPWARD_VELOCITY_CAP = 20; const MAX_DOWNWARD_VELOCITY_CAP = -25; 
+        const DAMPING_FACTOR = 0.98;   
+        let onPlatform = false; 
+        const MONKEY_WIDTH = 50; const MONKEY_HEIGHT = 60;
+        let OCEAN_SURFACE_Y; 
+        let platforms = []; let obstacles = []; let bananas = [];
+        
+        let gameSpeed; 
+        
+        let lastTime = 0; let gameLoopId;
+        let sfxGainNode; let canPlayThrustSound = true;
+
+        function initAudio() {
+            if (audioContext) return; audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            sfxGainNode = audioContext.createGain(); sfxGainNode.gain.value = 0.3; sfxGainNode.connect(audioContext.destination);
+        }
+        async function setupMedia() {
+            permissionInfo.innerHTML = "Requesting permissions...";
+            try {
+                const videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+                cameraFeed.srcObject = videoStream; 
+                permissionInfo.innerHTML = "Camera OK. <br>Waiting for Mic...";
+            } catch (vidErr) {
+                console.warn("Video access denied or not available:", vidErr);
+                permissionInfo.innerHTML = "Video not available. Game will run without camera background. Waiting for Mic...";
+                cameraFeed.style.display = 'none'; gameContainer.style.backgroundColor = '#52a2f2'; 
+            }
+
+            try {
+                microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                if (!audioContext) initAudio();
+                const source = audioContext.createMediaStreamSource(microphoneStream);
+                analyser = audioContext.createAnalyser(); analyser.fftSize = 256; 
+                audioDataArray = new Uint8Array(analyser.frequencyBinCount); source.connect(analyser);
+                isMicAllowed = true; micIcon.textContent = '🎤';
+                micIcon.style.color = 'var(--text-color)'; 
+                
+                if (permissionInfo.textContent.startsWith("Video not available")) {
+                    permissionInfo.innerHTML = "Video not available. Mic OK! <br>Shout to Fly, or Tap for boost.";
+                } else {
+                     permissionInfo.innerHTML = "Camera & Mic OK! <br>Shout to Fly, or Tap for boost.";
+                }
+            } catch (audErr) {
+                console.warn("Mic access denied:", audErr); isMicAllowed = false; micIcon.textContent = '🔇';
+                micIcon.style.color = 'var(--text-color)'; 
+                let currentPermInfo = permissionInfo.textContent;
+                 if (currentPermInfo.includes("Camera OK")) {
+                    permissionInfo.innerHTML = "Camera OK. Mic denied/unavailable. <br>Tap for boost.";
+                } else if (currentPermInfo.startsWith("Video not available")) {
+                     permissionInfo.innerHTML = "Video not available. Mic denied/unavailable. <br>Tap for boost.";
+                }
+                else { 
+                    permissionInfo.textContent = "Cam/Mic denied or unavailable. Tap for boost.";
+                }
+            }
+        }
+
+        function getMicVolumeAndFrequency() { 
+            if (!isMicAllowed || !analyser) {
+                micIcon.textContent = '🔇';
+                micIcon.style.color = 'var(--text-color)';
+                volumeBar.style.width = `0%`;
+                return 0;
+            }
+            analyser.getByteFrequencyData(audioDataArray);
+            let sum = 0; 
+            let maxAmp = 0;
+            let maxAmpIdx = 0;
+            for (let i = 0; i < audioDataArray.length; i++) {
+                 sum += audioDataArray[i];
+                 if (audioDataArray[i] > maxAmp) {
+                    maxAmp = audioDataArray[i];
+                    maxAmpIdx = i;
+                }
+            }
+            const averageVolume = sum / audioDataArray.length; 
+            volumeBar.style.width = `${Math.min(100, (averageVolume / 128) * 100)}%`;
+
+            const dominantFrequency = maxAmpIdx * (audioContext.sampleRate / analyser.fftSize);
+
+            if (averageVolume > BYTE_FLIGHT_THRESHOLD / 3) { 
+                if (dominantFrequency < 250) { 
+                    micIcon.textContent = '🎤'; micIcon.style.color = 'lightblue';
+                } else if (dominantFrequency < 600) { 
+                    micIcon.textContent = '🎶'; micIcon.style.color = 'lightgreen';
+                } else { 
+                    micIcon.textContent = '🎼'; micIcon.style.color = 'lightcoral';
+                }
+            } else {
+                micIcon.textContent = '🎤'; 
+                micIcon.style.color = 'var(--text-color)'; 
+            }
+            return averageVolume;
+        }
+
+        function playSound(type) {
+            if (!audioContext || !sfxGainNode) return; if (audioContext.state === 'suspended') audioContext.resume();
+            const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain();
+            gainNode.connect(sfxGainNode); oscillator.connect(gainNode); let duration = 0.5;
+            switch (type) {
+                case 'fly_thrust': oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(180, audioContext.currentTime); gainNode.gain.setValueAtTime(0.1, audioContext.currentTime); oscillator.frequency.exponentialRampToValueAtTime(250, audioContext.currentTime + 0.08); gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.1); duration = 0.1; break;
+                case 'collect': oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(600, audioContext.currentTime); gainNode.gain.setValueAtTime(0.2, audioContext.currentTime); oscillator.frequency.exponentialRampToValueAtTime(900, audioContext.currentTime + 0.1); gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15); duration = 0.15; break;
+                case 'splash': oscillator.type = 'noise'; const bqFilter = audioContext.createBiquadFilter(); bqFilter.type = "lowpass"; bqFilter.frequency.setValueAtTime(1000, audioContext.currentTime); bqFilter.Q.setValueAtTime(1, audioContext.currentTime); oscillator.connect(bqFilter); bqFilter.connect(gainNode); gainNode.gain.setValueAtTime(0.3, audioContext.currentTime); gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.4); duration = 0.4; break;
+                case 'gameover': oscillator.type = 'sawtooth'; oscillator.frequency.setValueAtTime(200, audioContext.currentTime); gainNode.gain.setValueAtTime(0.4, audioContext.currentTime); oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.4); gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5); duration = 0.5; break;
+                case 'levelcomplete': 
+                    oscillator.type = 'triangle'; 
+                    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    oscillator.frequency.setValueAtTime(392, audioContext.currentTime); // G4
+                    oscillator.frequency.linearRampToValueAtTime(523.25, audioContext.currentTime + 0.15); // C5
+                    oscillator.frequency.linearRampToValueAtTime(659.25, audioContext.currentTime + 0.3);  // E5
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5); duration = 0.5; 
+                    break;
+            }
+            oscillator.start(audioContext.currentTime); oscillator.stop(audioContext.currentTime + duration);
+        }
+        function updateMonkeyVisuals() {
+             if (appState === 'GAMEOVER' && monkeyElement.classList.contains('splashed')) { monkeyElement.classList.add('splashed'); monkeyElement.classList.remove('flying-up', 'falling'); } 
+             else if (monkeyVY > 0.5) { monkeyElement.classList.add('flying-up'); monkeyElement.classList.remove('falling', 'splashed'); } 
+             else if (monkeyVY < -0.5) { monkeyElement.classList.add('falling'); monkeyElement.classList.remove('flying-up', 'splashed'); } 
+             else { monkeyElement.classList.remove('flying-up', 'falling', 'splashed'); }
+        }
+
+        function updateMonkey(deltaTime) {
+            if (appState === 'GAMEOVER' && monkeyElement.classList.contains('splashed')) {
+                monkeyElement.style.bottom = `${Math.max(0, monkeyY - 2 * (deltaTime / (1000/60)))}px`; return;
+            }
+            const dtFactor = deltaTime / (1000 / 60); 
+            let upwardAccelerationMagnitude = 0; 
+
+            if (isMicAllowed && appState === 'PLAYING') {
+                const volume = getMicVolumeAndFrequency(); 
+                if (volume > BYTE_FLIGHT_THRESHOLD) {
+                    const volumeRange = MAX_VOLUME_FOR_FLIGHT_SCALING - BYTE_FLIGHT_THRESHOLD;
+                    const currentVolumeInFlyRange = Math.max(0, volume - BYTE_FLIGHT_THRESHOLD);
+                    const flyScale = Math.min(1, currentVolumeInFlyRange / volumeRange);
+                    upwardAccelerationMagnitude = (MIN_UPWARD_FORCE_SCALER + flyScale * (MAX_UPWARD_FORCE_SCALER - MIN_UPWARD_FORCE_SCALER)) * GRAVITY_FORCE;
+
+                    if (canPlayThrustSound && upwardAccelerationMagnitude > GRAVITY_FORCE * 0.8) { 
+                        playSound('fly_thrust'); canPlayThrustSound = false;
+                        setTimeout(() => { canPlayThrustSound = true; }, 150); 
+                    }
+                }
+            }
+             let netVerticalAcceleration = upwardAccelerationMagnitude - GRAVITY_FORCE;
+            if (onPlatform) { if (upwardAccelerationMagnitude < GRAVITY_FORCE) { onPlatform = false; } else { onPlatform = false; } }
+            if (!onPlatform) { monkeyVY += netVerticalAcceleration * dtFactor; }
+            monkeyVY *= Math.pow(DAMPING_FACTOR, dtFactor); 
+            monkeyVY = Math.min(monkeyVY, MAX_UPWARD_VELOCITY_CAP); monkeyVY = Math.max(monkeyVY, MAX_DOWNWARD_VELOCITY_CAP);
+            monkeyY += monkeyVY * dtFactor;
+            updateMonkeyVisuals();
+            const monkeyRect = { bottom: monkeyY, top: monkeyY + MONKEY_HEIGHT, left: MONKEY_FIXED_X, right: MONKEY_FIXED_X + MONKEY_WIDTH };
+            let landedThisFrame = false;
+            for (const p of platforms) { 
+                const platformRect = { left: p.x, right: p.x + p.width, bottom: p.y, topEdge: p.y + p.height  };
+                if (monkeyRect.right > platformRect.left && monkeyRect.left < platformRect.right) {
+                    const previousMonkeyBottom = monkeyRect.bottom - (monkeyVY * dtFactor); 
+                    if (monkeyVY <= 0 && monkeyRect.bottom <= platformRect.topEdge && previousMonkeyBottom >= platformRect.topEdge -1) { 
+                        monkeyY = platformRect.topEdge; landedThisFrame = true;
+                        if (upwardAccelerationMagnitude < GRAVITY_FORCE) { monkeyVY = 0; onPlatform = true; } else { onPlatform = false; }
+                        break; 
+                    }
+                }
+            }
+            if (onPlatform && !landedThisFrame) { onPlatform = false; }
+            const gameAreaHeight = gameArea.clientHeight;
+            if (monkeyY < OCEAN_SURFACE_Y) { monkeyY = OCEAN_SURFACE_Y; setGameOver(true); }
+            if (monkeyRect.top > gameAreaHeight) { monkeyY = gameAreaHeight - MONKEY_HEIGHT; if (monkeyVY > 0) monkeyVY = 0; }
+            if (!(appState === 'GAMEOVER' && monkeyElement.classList.contains('splashed'))) {
+                 monkeyElement.style.bottom = `${monkeyY}px`;
+            }
+        }
+        function createPlatformGroup() {
+            currentLevelData = LEVELS[currentLevelIndex]; 
+            const screenWidth = gameArea.clientWidth; const screenHeight = gameArea.clientHeight;
+            const minPlatformWidth = currentLevelData.platformMinWidth; 
+            const maxPlatformWidth = currentLevelData.platformMaxWidth; 
+            const platformHeight = 60; 
+            let minGap = currentLevelData.minGap; 
+            let maxGap = currentLevelData.maxGap - (gameSpeed * 8); // Reduced impact of speed on gap
+            minGap = Math.max(70, minGap); maxGap = Math.max(minGap + 40, maxGap);
+
+            let currentX = screenWidth; 
+            let lastPlatformBaseY = platforms.length > 0 ? platforms[platforms.length-1].y : OCEAN_SURFACE_Y + screenHeight * 0.2; 
+            const numPlatformsInGroup = Math.random() < 0.3 ? 1 : (Math.random() < 0.7 ? 2 : 3); // More chance for 2-3 platforms
+            
+            for (let i = 0; i < numPlatformsInGroup; i++) {
+                if (i > 0) currentX += Math.random() * (maxGap - minGap) + minGap;
+                const platformWidth = Math.random() * (maxPlatformWidth - minPlatformWidth) + minPlatformWidth;
+                const yVariationRange = currentLevelData.platformYVariance || 160; // Slightly less variance for easier levels
+                const yVariation = (Math.random() - 0.5) * yVariationRange; 
+                let platformY = lastPlatformBaseY + yVariation;
+                platformY = Math.max(OCEAN_SURFACE_Y + screenHeight * 0.08, Math.min(screenHeight * 0.75, platformY)); // Wider safe Y range
+                
+                const platformEl = document.createElement('div'); platformEl.className = 'game-element platform visible';
+                platformEl.style.width = `${platformWidth}px`; platformEl.style.height = `${platformHeight}px`;
+                platformEl.style.left = `${currentX}px`; platformEl.style.bottom = `${platformY}px`; gameArea.appendChild(platformEl);
+                const platformData = { element: platformEl, x: currentX, y: platformY, width: platformWidth, height: platformHeight, hasSpike: false, hasBanana: false };
+                platforms.push(platformData);
+
+                if (platforms.length > 2 && platformWidth > 70 && Math.random() < currentLevelData.spikeChance) {
+                    const spikeEl = document.createElement('div'); spikeEl.className = 'game-element spike visible'; 
+                    const spikeX = currentX + platformWidth / 2 - 10; const spikeY = platformY + platformHeight; 
+                    spikeEl.style.left = `${spikeX}px`; spikeEl.style.bottom = `${spikeY}px`;
+                    gameArea.appendChild(spikeEl); obstacles.push({ element: spikeEl, x: spikeX, y: spikeY, width: 20, height: 20 });
+                    platformData.hasSpike = true;
+                }
+                if (!platformData.hasSpike && platformWidth > 50 && Math.random() < currentLevelData.bananaChance) { 
+                    const bananaEl = document.createElement('div'); bananaEl.className = 'game-element banana visible';
+                    const bananaX = currentX + platformWidth / 2 - 15; const bananaY = platformY + platformHeight + 20 + (Math.random() * 70); // Slightly lower bananas
+                    bananaEl.style.left = `${bananaX}px`; bananaEl.style.bottom = `${bananaY}px`;
+                    gameArea.appendChild(bananaEl); bananas.push({ element: bananaEl, x: bananaX, y: bananaY, width: 30, height: 30, collected: false });
+                    platformData.hasBanana = true;
+                }
+                currentX += platformWidth; lastPlatformBaseY = platformY;
+            }
+        }
+        function addSparkle(bananaElement) {
+            const rect = bananaElement.getBoundingClientRect();
+            const gameAreaRect = gameArea.getBoundingClientRect();
+            for (let i = 0; i < 5; i++) {
+                const sparkle = document.createElement('div');
+                sparkle.className = 'sparkle';
+                sparkle.style.left = `${rect.left - gameAreaRect.left + rect.width / 2 + (Math.random() - 0.5) * 20}px`;
+                sparkle.style.bottom = `${gameAreaRect.height - (rect.bottom - gameAreaRect.top) + rect.height / 2 + (Math.random() - 0.5) * 20}px`;
+                gameArea.appendChild(sparkle);
+                setTimeout(() => sparkle.remove(), 500);
+            }
+        }
+        function updateGameElements(deltaTime) {
+            const dtFactor = deltaTime / (1000 / 60); const normalizedSpeed = gameSpeed * dtFactor; 
+            for (let i = platforms.length - 1; i >= 0; i--) { const p = platforms[i]; p.x -= normalizedSpeed; p.element.style.left = `${p.x}px`; if (p.x + p.width < 0) { p.element.remove(); platforms.splice(i, 1); } }
+            for (let i = obstacles.length - 1; i >= 0; i--) { const o = obstacles[i]; o.x -= normalizedSpeed; o.element.style.left = `${o.x}px`; if (o.x + o.width < 0) { o.element.remove(); obstacles.splice(i, 1); } }
+            for (let i = bananas.length - 1; i >= 0; i--) { const b = bananas[i]; if (b.collected) continue; b.x -= normalizedSpeed; b.element.style.left = `${b.x}px`; if (b.x + b.width < 0) { if (!b.collected) b.element.remove(); bananas.splice(i, 1); } }
+            if (platforms.length === 0 || platforms[platforms.length - 1].x < gameArea.clientWidth - (Math.random() * 80 + 150) ) { createPlatformGroup(); }
+        }
+        function checkCollisions() {
+             if (appState !== 'PLAYING') return; 
+            const hitboxInsetAmount = MONKEY_WIDTH * 0.15; 
+            const monkeyHitbox = { bottom: monkeyY + hitboxInsetAmount, top: monkeyY + MONKEY_HEIGHT - hitboxInsetAmount, left: MONKEY_FIXED_X + hitboxInsetAmount, right: MONKEY_FIXED_X + MONKEY_WIDTH - hitboxInsetAmount };
+            for (const obs of obstacles) { const obsRect = { left: obs.x, right: obs.x + obs.width, bottom: obs.y, top: obs.y + obs.height }; if (monkeyHitbox.right > obsRect.left && monkeyHitbox.left < obsRect.right && monkeyHitbox.top > obsRect.bottom && monkeyHitbox.bottom < obsRect.top) { setGameOver(); return; } }
+            for (let i = bananas.length - 1; i >= 0; i--) { const ban = bananas[i]; if (ban.collected) continue; const banRect = { left: ban.x, right: ban.x + ban.width, bottom: ban.y, top: ban.y + ban.height }; if (monkeyHitbox.right > banRect.left && monkeyHitbox.left < banRect.right && monkeyHitbox.top > banRect.bottom && monkeyHitbox.bottom < banRect.top) { ban.collected = true; ban.element.classList.add('collected'); addSparkle(ban.element); setTimeout(() => { if(ban.element) ban.element.remove(); }, 500); score += 10; updateScoreDisplay(); playSound('collect'); 
+                if (score >= currentLevelData.targetScore) {
+                    completeLevel();
+                    return; 
+                }
+            } }
+        }
+        function updateScoreDisplay() {
+            scoreDisplay.textContent = `Score: ${score}`; 
+            if (score > highScore) { highScore = score; localStorage.setItem('shoutyMonkeyOceanFallHighScore', highScore); } 
+            highScoreDisplay.textContent = `High: ${highScore}`; menuHighScoreDisplay.textContent = `High Score: ${highScore}`;
+            targetScoreDisplay.textContent = `Target: ${currentLevelData.targetScore}`;
+            levelDisplay.textContent = `Level: ${currentLevelData.id}`;
+        }
+        function increaseDifficulty() { 
+            if (gameSpeed < currentLevelData.maxGameSpeed) gameSpeed += 0.0008; // Slower increase
+        }
+
+        function setGameOver(splashed = false) {
+            if (appState === 'GAMEOVER') return; appState = 'GAMEOVER'; cancelAnimationFrame(gameLoopId); 
+            if (splashed) { playSound('splash'); monkeyElement.classList.add('splashed'); } else { playSound('gameover'); }
+            const gameOverScreenDelay = splashed ? 500 : 0; 
+            setTimeout(() => { finalScoreDisplay.textContent = `Your Score: ${score}`; gameOverScreen.style.display = 'flex'; uiTopElement.classList.remove('visible'); }, gameOverScreenDelay);
+            stopMediaTracks(); 
+            if (!splashed) { monkeyElement.classList.remove('flying-up', 'falling'); }
+        }
+        
+        // NEW: Function to create confetti pieces
+        function createConfetti() {
+            const confettiColors = ['var(--accent-color)', 'var(--banana-color)', '#4CAF50', '#64C8FF'];
+            for (let i = 0; i < 30; i++) { // Create 30 pieces
+                const piece = document.createElement('div');
+                piece.classList.add('confetti-piece');
+                piece.style.left = `${Math.random() * 100}%`; // Random horizontal start
+                piece.style.backgroundColor = confettiColors[Math.floor(Math.random() * confettiColors.length)];
+                piece.style.width = `${Math.random() * 8 + 5}px`; // Random size
+                piece.style.height = piece.style.width;
+                if (Math.random() > 0.5) piece.style.borderRadius = '50%'; // Some round, some square
+                piece.style.animationDelay = `${Math.random() * 0.5}s`; // Stagger start
+                gameArea.appendChild(piece); // Add to game area to fall over it
+                setTimeout(() => piece.remove(), 2000); // Remove after animation
+            }
+        }
+
+        function completeLevel() {
+            if (appState === 'LEVEL_COMPLETE') return;
+            appState = 'LEVEL_COMPLETE';
+            cancelAnimationFrame(gameLoopId);
+            playSound('levelcomplete');
+            stopMediaTracks();
+            uiTopElement.classList.remove('visible'); // Hide UI during win effect
+
+            // Show win effect
+            winEffectText.textContent = Math.random() > 0.5 ? "LEVEL UP!" : "VICTORY!";
+            winEffectOverlay.style.display = 'flex';
+            createConfetti(); // Start confetti
+
+            setTimeout(() => {
+                winEffectOverlay.style.display = 'none'; // Hide win effect
+
+                levelCompleteFinalScore.textContent = `Your Score: ${score}`;
+                levelCompleteScreen.style.display = 'flex';
+
+                const nextLevel = currentLevelData.id; 
+                if (nextLevel >= maxUnlockedLevel && nextLevel < LEVELS.length) {
+                    maxUnlockedLevel = nextLevel + 1;
+                    localStorage.setItem('shoutyMonkeyMaxUnlockedLevel', maxUnlockedLevel);
+                }
+                nextLevelButton.disabled = currentLevelData.id >= LEVELS.length;
+            }, 2000); // Duration of win effect before showing level complete screen
+        }
+        
+        function stopMediaTracks() {
+            if (cameraFeed.srcObject) { cameraFeed.srcObject.getTracks().forEach(track => track.stop()); cameraFeed.srcObject = null; }
+            if (microphoneStream) { microphoneStream.getTracks().forEach(track => track.stop()); microphoneStream = null; }
+            isMicAllowed = false; micIcon.textContent = '🔇'; micIcon.style.color = 'var(--text-color)'; volumeBar.style.width = `0%`; 
+        }
+
+        function resetGame() { 
+            currentLevelData = LEVELS[currentLevelIndex];
+            score = 0; 
+            gameSpeed = currentLevelData.initialGameSpeed; 
+            oceanElement.style.height = `${currentLevelData.oceanHeightPercent}%`; 
+            OCEAN_SURFACE_Y = oceanElement.offsetHeight; 
+
+            MONKEY_FIXED_X = gameContainer.clientWidth * 0.15; 
+            const initialPlatformActualY = OCEAN_SURFACE_Y + gameArea.clientHeight * 0.15; 
+            monkeyY = initialPlatformActualY + 60; 
+            monkeyVY = 0; onPlatform = true; 
+            monkeyElement.style.left = `${MONKEY_FIXED_X}px`; monkeyElement.style.bottom = `${monkeyY}px`;
+            monkeyElement.classList.remove('flying-up', 'falling', 'splashed', 'visible'); 
+            
+            const gameInstanceElements = gameArea.querySelectorAll('.game-element:not(#monkey), .confetti-piece'); // Also remove old confetti
+            gameInstanceElements.forEach(el => el.remove());
+            platforms = []; obstacles = []; bananas = [];
+            
+            const initialPlatformWidth = 250; const initialPlatformX = MONKEY_FIXED_X - initialPlatformWidth/2 + MONKEY_WIDTH/2;
+            const initialPlatformEl = document.createElement('div'); initialPlatformEl.className = 'game-element platform'; 
+            initialPlatformEl.style.width = `${initialPlatformWidth}px`; initialPlatformEl.style.height = `60px`;
+            initialPlatformEl.style.left = `${initialPlatformX}px`; initialPlatformEl.style.bottom = `${initialPlatformActualY}px`; gameArea.appendChild(initialPlatformEl);
+            platforms.push({ element: initialPlatformEl, x: initialPlatformX, y: initialPlatformActualY, width: initialPlatformWidth, height: 60 });
+            updateScoreDisplay(); 
+         }
+
+        async function _startGameSequence() {
+            if (audioContext && audioContext.state === 'suspended') await audioContext.resume();
+            currentLevelData = LEVELS[currentLevelIndex]; 
+            
+            mainMenuScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            levelCompleteScreen.style.display = 'none';
+            levelsScreen.style.display = 'none';
+            loadingScreen.style.display = 'none';
+            winEffectOverlay.style.display = 'none'; // Ensure win effect is hidden
+
+            await setupMedia(); 
+            resetGame(); 
+            appState = 'PLAYING';
+            
+            monkeyElement.classList.add('visible'); 
+            uiTopElement.classList.add('visible');
+            platforms.forEach(p => p.element.classList.add('visible'));
+            monkeyElement.classList.remove('splashed'); 
+            
+            lastTime = performance.now(); 
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        function gameLoop(currentTime) {
+            if (appState === 'GAMEOVER' && monkeyElement.classList.contains('splashed')) {
+                updateMonkeyVisuals(); 
+                const deltaTime = currentTime - lastTime; lastTime = currentTime;
+                const cappedDeltaTime = Math.min(deltaTime, 100); 
+                updateMonkey(cappedDeltaTime); 
+                requestAnimationFrame(gameLoop); 
+                return;
+            }
+            if (appState !== 'PLAYING') { return; }
+
+            const deltaTime = currentTime - lastTime; lastTime = currentTime;
+            const cappedDeltaTime = Math.min(deltaTime, 100); 
+            
+            updateMonkey(cappedDeltaTime); 
+            if (appState === 'PLAYING') { 
+                updateGameElements(cappedDeltaTime); 
+                checkCollisions(); 
+                increaseDifficulty(); 
+            }
+            if (appState === 'PLAYING' || (appState === 'GAMEOVER' && monkeyElement.classList.contains('splashed'))) {
+                gameLoopId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function populateLevelsScreen() {
+            levelButtonsContainer.innerHTML = ''; 
+            LEVELS.forEach((level, index) => {
+                const button = document.createElement('button');
+                button.classList.add('level-button');
+                button.textContent = `${level.id}. ${level.name}`;
+                button.dataset.levelIndex = index;
+                if (level.id > maxUnlockedLevel) {
+                    button.disabled = true;
+                    button.title = "Complete previous levels to unlock";
+                }
+                button.addEventListener('click', () => {
+                    currentLevelIndex = parseInt(button.dataset.levelIndex);
+                    currentLevelData = LEVELS[currentLevelIndex];
+                    levelsScreen.style.display = 'none';
+                    mainMenuLevelInfo.textContent = `Level ${currentLevelData.id}: ${currentLevelData.name}`;
+                    mainMenuScreen.style.display = 'flex';
+                    appState = 'MAIN_MENU';
+                });
+                levelButtonsContainer.appendChild(button);
+            });
+        }
+
+        function showLevelsScreen() {
+            stopMediaTracks(); 
+            cancelAnimationFrame(gameLoopId); 
+            populateLevelsScreen();
+            mainMenuScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            levelCompleteScreen.style.display = 'none';
+            winEffectOverlay.style.display = 'none'; // Hide win effect if returning to levels
+            levelsScreen.style.display = 'flex';
+            appState = 'LEVELS';
+        }
+
+        window.addEventListener('load', () => {
+            currentLevelData = LEVELS[currentLevelIndex]; 
+            OCEAN_SURFACE_Y = oceanElement.offsetHeight; 
+            resetGame(); 
+            updateScoreDisplay(); 
+            menuHighScoreDisplay.textContent = `High Score: ${highScore}`;
+
+            setTimeout(() => { 
+                loadingScreen.style.display = 'none'; 
+                showLevelsScreen();
+            }, 1500);
+        });
+
+        playButton.addEventListener('click', _startGameSequence); 
+        restartButton.addEventListener('click', _startGameSequence); 
+
+        nextLevelButton.addEventListener('click', () => {
+            currentLevelIndex++;
+            if (currentLevelIndex < LEVELS.length) {
+                _startGameSequence();
+            } else {
+                showLevelsScreen(); 
+            }
+        });
+        backToLevelsFromCompleteButton.addEventListener('click', showLevelsScreen);
+        backToLevelsFromGameOverButton.addEventListener('click', showLevelsScreen);
+        backToLevelsFromMainMenuButton.addEventListener('click', showLevelsScreen);
+
+        gameContainer.addEventListener('click', (event) => {
+            if (event.target.tagName === 'BUTTON' || event.target.closest('button')) return; 
+            if (appState === 'PLAYING' && !isMicAllowed) { 
+                onPlatform = false; monkeyVY = TAP_BOOST_VELOCITY; playSound('fly_thrust');
+            }
+        });
+        
+        document.addEventListener('touchmove', function(e) { if (!gameContainer.contains(e.target) || e.target.closest('.screen')) { return; } e.preventDefault(); }, { passive: false });
+        window.addEventListener('resize', () => { 
+            OCEAN_SURFACE_Y = oceanElement.offsetHeight; 
+            if (appState !== 'PLAYING' && appState !== 'GAMEOVER' && appState !== 'LEVEL_COMPLETE' && appState !== 'WIN_EFFECT') { 
+                resetGame(); 
+            } 
+        });
+    </script>
+</body>
+</html>
